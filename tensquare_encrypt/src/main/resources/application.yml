@@ -1,0 +1,19 @@
+server:
+  port: 9013
+spring:
+  application:
+    name: tensquare_encrypt
+zuul:
+  routes:
+    tensquare_article:
+      path: /article/**
+      serviceId: tensquare_article
+      strip-prefix: true
+      sentiviteHeaders:
+      customSensitiveHeaders: true
+eureka:
+  instance:
+    prefer-ip-address: true
+  client:
+    service-url:
+      defaultZone: http://127.0.0.1:6868/eureka/
