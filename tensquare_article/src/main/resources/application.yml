@@ -2,7 +2,7 @@ server:
   port: 9004
 spring:
   application:
-    name: tensquare_article
+    name: tensquare-article
   datasource:
     type: com.alibaba.druid.pool.DruidDataSource
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -16,7 +16,8 @@ spring:
       host: 192.168.145.131
   redis:
     host: 192.168.145.131
-
+  rabbitmq:
+    host: 192.168.145.131
 
 # Mybatis-Plus 配置
 mybatis-plus:
