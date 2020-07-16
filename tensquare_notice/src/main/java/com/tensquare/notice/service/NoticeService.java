@@ -65,10 +65,10 @@ public class NoticeService {
         noticeDao.insert(notice);
 
         //推送消息入库，新消息提醒
-        NoticeFresh noticeFresh = new NoticeFresh();
-        noticeFresh.setNoticeId(id);
-        noticeFresh.setUserId(notice.getReceiverId());
-        noticeFreshDao.insert(noticeFresh);
+//        NoticeFresh noticeFresh = new NoticeFresh();
+//        noticeFresh.setNoticeId(id);
+//        noticeFresh.setUserId(notice.getReceiverId());
+//        noticeFreshDao.insert(noticeFresh);
     }
 
     public void updateById(Notice notice) {
