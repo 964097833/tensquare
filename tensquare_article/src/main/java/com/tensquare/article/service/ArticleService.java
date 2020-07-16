@@ -6,6 +6,12 @@ import com.tensquare.article.client.NoticeClient;
 import com.tensquare.article.dao.ArticleDao;
 import com.tensquare.article.pojo.Article;
 import com.tensquare.article.pojo.Notice;
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.BindingBuilder;
+import org.springframework.amqp.core.DirectExchange;
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
@@ -27,6 +33,9 @@ public class ArticleService {
 
     @Autowired
     private RedisTemplate redisTemplate;
+
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
 
     @Autowired
     private NoticeClient noticeClient;
@@ -70,6 +79,8 @@ public class ArticleService {
             notice.setState("0");
             noticeClient.save(notice);
         }
+
+        rabbitTemplate.convertAndSend("article_subscribe",authorId,id);
     }
 
     public void update(Article article) {
@@ -97,6 +108,15 @@ public class ArticleService {
         //根据文章id查询文章作者id
         String authorId = articleDao.selectById(articleId).getUserid();
 
+        RabbitAdmin rabbitAdmin = new RabbitAdmin(rabbitTemplate.getConnectionFactory());
+
+        DirectExchange exchange = new DirectExchange("article_subscribe");
+        rabbitAdmin.declareExchange(exchange);
+
+        Queue queue = new Queue("article_subscribe_"+userId,true);
+
+        Binding binding = BindingBuilder.bind(queue).to(exchange).with(authorId);
+
         String userKey = "article_subscribe_" + userId;
         String authorKey = "article_author_" + authorId;
 
@@ -107,32 +127,52 @@ public class ArticleService {
             //如果flag为true，已经订阅，则取消订阅
             redisTemplate.boundSetOps(userKey).remove(articleId);
             redisTemplate.boundSetOps(authorKey).remove(userId);
+
+            rabbitAdmin.removeBinding(binding);
             return false;
         } else {
             //如果flag为false，没有订阅，则进行订阅
             redisTemplate.boundSetOps(userKey).add(articleId);
             redisTemplate.boundSetOps(authorKey).add(userId);
+
+            rabbitAdmin.declareQueue(queue);
+            rabbitAdmin.declareBinding(binding);
             return true;
         }
     }
 
-    public void thumbup(String articleId,String userId) {
-        //文章点赞
+    public void thumbup(String articleId, String userId) {
         Article article = articleDao.selectById(articleId);
-        article.setThumbup(article.getThumbup()+1);
+        article.setThumbup(article.getThumbup() + 1);
         articleDao.updateById(article);
 
-        //消息通知
+        //点赞成功后，需要发送消息给文章作者（点对点消息）
         Notice notice = new Notice();
+        // 接收消息用户的ID
         notice.setReceiverId(article.getUserid());
+        // 进行操作用户的ID
         notice.setOperatorId(userId);
-        notice.setAction("thumbup");
+        // 操作类型（评论，点赞等）
+        notice.setAction("publish");
+        // 被操作的对象，例如文章，评论等
         notice.setTargetType("article");
+        // 被操作对象的id，例如文章的id，评论的id'
         notice.setTargetId(articleId);
-        notice.setCreatetime(new Date());
+        // 通知类型
         notice.setType("user");
-        notice.setState("0");
 
+        //保存消息
         noticeClient.save(notice);
+
+        //1 创建Rabbit管理器
+        RabbitAdmin rabbitAdmin = new RabbitAdmin(rabbitTemplate.getConnectionFactory());
+
+        //2 创建队列，每个用户都有自己的队列，通过用户id进行区分
+        Queue queue = new Queue("article_thumbup_" + article.getUserid(), true);
+        rabbitAdmin.declareQueue(queue);
+
+        //3 发送消息
+        rabbitTemplate.convertAndSend("article_thumbup_"+article.getUserid(),articleId);
+
     }
 }
